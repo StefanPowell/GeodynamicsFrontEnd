@@ -23,24 +23,48 @@ function App() {
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-    const el = document.createElement('div');
-    el.style.width = '12px';
-    el.style.height = '12px';
-    el.style.backgroundColor = 'red';
-    el.style.borderRadius = '50%';
-    el.style.boxShadow = '0 0 6px red';
+    map.current.on('load', () => {
+      // Add empty GeoJSON source for quake dots
+      map.current.addSource('quakes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
 
-    new mapboxgl.Marker(el)
-      .setLngLat([-98.5, 39.5])
-      .addTo(map.current);
+      // Add circle layer
+      map.current.addLayer({
+        id: 'quakes-layer',
+        type: 'circle',
+        source: 'quakes',
+        paint: {
+          'circle-radius': 8,
+          'circle-color': 'red',
+          'circle-stroke-color': 'white',
+          'circle-stroke-width': 2
+        }
+      });
+    });
   }, []);
 
-  // Initial fetch of earthquake data
+  // Update map whenever quakeData changes
+  useEffect(() => {
+    if (!map.current || !map.current.getSource('quakes')) return;
+
+    const features = quakeData.map(q => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [q.longitude, q.latitude] }
+    }));
+
+    const geojson = { type: 'FeatureCollection', features };
+
+    map.current.getSource('quakes').setData(geojson);
+  }, [quakeData]);
+
+  // Fetch initial earthquake data
   useEffect(() => {
     const fetchInitialQuakes = async () => {
       try {
-        const response = await fetch('https://localhost:44316/api/QuakeData?valuesToShow=19', {
-          headers: { 'accept': 'application/json' }
+        const response = await fetch('https://localhost:44316/api/QuakeData?valuesToShow=25', {
+          headers: { accept: 'application/json' }
         });
         if (!response.ok) throw new Error('Network response was not ok');
         const data = await response.json();
@@ -54,26 +78,26 @@ function App() {
     fetchInitialQuakes();
   }, []);
 
-  // Highlight rows every 5 seconds
+  // Highlight table rows every 8 seconds
   useEffect(() => {
     if (quakeData.length === 0) return;
 
     const interval = setInterval(() => {
-      setHighlightIndex(prevIndex => prevIndex + 1);
+      setHighlightIndex(prevIndex => (prevIndex + 1) % quakeData.length);
     }, 8000);
 
     return () => clearInterval(interval);
   }, [quakeData]);
 
-  // Fetch new data when reaching the last row
+  // Fetch new data when reaching last row
   useEffect(() => {
     if (quakeData.length === 0) return;
 
-    if (highlightIndex >= quakeData.length) {
+    if (highlightIndex >= quakeData.length - 1) {
       const fetchQuakes = async () => {
         try {
-          const response = await fetch('https://localhost:44316/api/QuakeData?valuesToShow=19', {
-            headers: { 'accept': 'application/json' }
+          const response = await fetch('https://localhost:44316/api/QuakeData?valuesToShow=25', {
+            headers: { accept: 'application/json' }
           });
           if (!response.ok) throw new Error('Network response was not ok');
           const data = await response.json();
@@ -81,7 +105,7 @@ function App() {
           setHighlightIndex(0);
         } catch (error) {
           console.error('Error fetching quake data:', error);
-          setHighlightIndex(0); // reset even if fetch fails
+          setHighlightIndex(0);
         }
       };
 
